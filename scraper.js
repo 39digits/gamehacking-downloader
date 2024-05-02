@@ -1,0 +1,68 @@
+const playwright = require('playwright');
+
+async function scrapeListingPage(url) {
+  // The scraping doesn't seem to work for gamehacking when headless is true.
+  const browser = await playwright.chromium.launch({ headless: false });
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  await page.goto(url, {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Grab all of the game links on the current listing page
+  const gameLinks = await page.$$eval('a[href^="/game/"]', (links) =>
+    links.map((link) => link.href)
+  );
+
+  //console.log(gameLinks);
+
+  // Close the browser
+  await context.close();
+  await browser.close();
+
+  // Return or process the extracted data
+  return gameLinks;
+}
+
+async function downloadCheat(url) {
+  // The scraping doesn't seem to work for gamehacking when headless is true.
+  const browser = await playwright.chromium.launch({ headless: false });
+  const context = await browser.newContext({ acceptDownloads: true });
+  const page = await context.newPage();
+
+  await page.goto(url, {
+    waitUntil: 'domcontentloaded',
+  });
+
+  // Change the format to FXPak Pro YAML
+  await page.locator('a').filter({ hasText: 'BSNES 0 - 0.74 (.cht)' }).click();
+  await page.locator('li').filter({ hasText: 'FXPak Pro 1.7 (.yml)' }).click();
+
+  // Trigger the download
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download' }).click();
+  const download = await downloadPromise;
+  // And save it to the downloads folder
+  await download.saveAs('./downloads/snes/' + download.suggestedFilename());
+
+  // Tidy everything up
+  await context.close();
+  await browser.close();
+}
+
+async function scrape() {
+  try {
+    gameLinks = await scrapeListingPage(
+      'https://gamehacking.org/system/snes/all/0'
+    );
+
+    for (let i = 0; i < gameLinks.length; i++) {
+      await downloadCheat(gameLinks[i]);
+    }
+  } catch (e) {
+    console.log(e);
+  }
+}
+
+scrape();
